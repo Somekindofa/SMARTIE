@@ -3,6 +3,7 @@
 #include <PubSubClient.h>
 #include <ESP8266WebServer.h>
 #include <DNSServer.h>
+#include <ArduinoJson.h>
 
 const char* ssid = "Livebox-6A10";
 const char* password = "xf3wgEcRLu6Gf7bLkV";
@@ -13,7 +14,12 @@ const int ledPin = LED_BUILTIN;                        // Replace with the actua
 const int buttonPin = D1;                     // Replace with the actual GPIO pin connected to SW
 volatile bool ledState = false;               // This will keep track of the LED state
 volatile unsigned long lastDebounceTime = 0;  // Timestamp to track the last interrupt event
-unsigned long debounceDelay = 50;             // Debounce delay in milliseconds
+unsigned long debounceDelay = 20;             // Debounce delay in milliseconds
+
+const int clkPin = D2; // Replace with the actual GPIO pin connected to CLK
+const int dtPin = D3;  // Replace with the actual GPIO pin connected to DT
+int counter = 0; // This will keep track of the encoder position
+int lastEncoded = 0;
 
 // Forward declaration of the callback function
 void IRAM_ATTR handleButtonPress();
@@ -84,6 +90,9 @@ void setup_wifi() {
 void setup() {
   pinMode(ledPin, OUTPUT);     // Initialize the LED pin as an output
   pinMode(buttonPin, INPUT_PULLUP); // Initialize the button pin as an input with internal pull-up resistor
+  pinMode(clkPin, INPUT_PULLUP);
+  pinMode(dtPin, INPUT_PULLUP);
+
   digitalWrite(ledPin, HIGH);  // Turn the LED off
   // Attach the interrupt to the button pin
   attachInterrupt(digitalPinToInterrupt(buttonPin), handleButtonPress, RISING); // Call the handleButtonPress function when the button is pressed. FALLING means the interrupt will be triggered when the pin goes from HIGH to LOW
@@ -102,6 +111,18 @@ void loop() {
     reconnect();
   }
   client.loop(); // This should be called regularly to process incoming messages
+
+  int MSB = digitalRead(clkPin); // MSB = most significant bit
+  int LSB = digitalRead(dtPin); // LSB = least significant bit
+
+  int encoded = (MSB << 1) | LSB; // converting the 2 pin value to single number
+  int sum = (lastEncoded << 2) | encoded; // adding it to the previous encoded value
+
+  if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) counter ++;
+  if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) counter --;
+
+  lastEncoded = encoded; // store this value for next time
+
   static bool lastLedState = !ledState; // Static variable to track the last LED state we handled
   // Check if an interrupt has occurred
   // Check if an interrupt has occurred and the ledState has been toggled
