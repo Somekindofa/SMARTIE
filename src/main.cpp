@@ -93,7 +93,9 @@ void setup() {
   pinMode(clkPin, INPUT_PULLUP);
   pinMode(dtPin, INPUT_PULLUP);
 
-  digitalWrite(ledPin, HIGH);  // Turn the LED off
+  counter = 0;
+
+  digitalWrite(ledPin, LOW);  // Turn the LED off
   // Attach the interrupt to the button pin
   attachInterrupt(digitalPinToInterrupt(buttonPin), handleButtonPress, RISING); // Call the handleButtonPress function when the button is pressed. FALLING means the interrupt will be triggered when the pin goes from HIGH to LOW
   Serial.begin(115200);
@@ -118,10 +120,40 @@ void loop() {
   int encoded = (MSB << 1) | LSB; // converting the 2 pin value to single number
   int sum = (lastEncoded << 2) | encoded; // adding it to the previous encoded value
 
-  if(sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) counter ++;
-  if(sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) counter --;
+  static bool notchTurned = false; // Variable to track if a complete notch turn has occurred
 
-  lastEncoded = encoded; // store this value for next time
+  if (sum == 0b1101 || sum == 0b0100 || sum == 0b0010 || sum == 0b1011) {
+    if (!notchTurned) {
+      counter++;
+      notchTurned = true;
+    }
+  } else if (sum == 0b1110 || sum == 0b0111 || sum == 0b0001 || sum == 0b1000) {
+    if (!notchTurned) {
+      counter--;
+      notchTurned = true;
+    }
+  } else {
+    notchTurned = false;
+  }
+
+  // If the counter has changed, publish the new value
+  static int lastCounter = -1; // Static variable to store the last counter value
+
+  if (counter != lastCounter) {
+    // Create JSON object
+    StaticJsonDocument<200> doc; // Adjust size based on your needs
+    doc["encoder"] = counter;
+
+    // Convert JSON object into a string
+    char jsonOutput[200]; // Adjust size based on your needs
+    serializeJson(doc, jsonOutput);
+
+    // Publish JSON string to MQTT
+    client.publish(ledTopic, jsonOutput);
+
+    // Update lastCounter to the new value
+    lastCounter = counter;
+  }
 
   static bool lastLedState = !ledState; // Static variable to track the last LED state we handled
   // Check if an interrupt has occurred
